@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ "Authentication Issue" if lang == "en" else "認証の問題" }} — Veluna Task{% endblock %}
+
+{% block content %}
+<div style="max-width: 500px; margin: 4rem auto; text-align: center;">
+  <div class="page-header">
+    <h1 style="color: var(--danger);">{{ "Authentication Issue" if lang == "en" else "認証の問題" }}</h1>
+  </div>
+  
+  <div class="panel">
+    <p style="margin-bottom: 2rem; color: var(--text-lt);">
+      {{ message }}
+    </p>
+    
+    <div class="flex flex-col gap-3">
+      <a href="/" class="btn btn-primary">{{ "Return to Login" if lang == "en" else "ログインに戻る" }}</a>
+      <a href="https://discord.com" target="_blank" class="btn btn-outline" style="border: 1px solid var(--border);">{{ "Contact Guild Admin" if lang == "en" else "管理者に連絡" }}</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

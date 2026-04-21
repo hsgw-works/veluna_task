@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+.env
+
+# Database
+quest_board.db
+quest_board.db-wal
+quest_board.db-shm
+
+# Media / Uploaded files
+uploads/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store

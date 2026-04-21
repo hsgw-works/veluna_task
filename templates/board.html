@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}クエスト一覧 — Quest Board{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ "Available Quests" if lang == "en" else "利用可能なクエスト" }}</h1>
+  <p class="subtitle">{{ "Select a quest to begin your journey" if lang == "en" else "冒険を始めるためにクエストを選択してください" }}</p>
+</div>
+
+{% if quests %}
+  <div class="quest-grid">
+    {% for q in quests %}
+    <div class="quest-card {% if q.type == 'EMERGENCY' %}emergency{% endif %}">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span class="badge {% if q.type == 'EMERGENCY' %}badge-rejected{% elif q.type == 'SPECIAL' %}badge-submitted{% else %}badge-open{% endif %}" 
+                style="font-size:0.5rem; border-radius:2px; font-weight:700;">
+            {{ q.type }}
+          </span>
+          <span class="badge badge-open" style="font-size:0.5rem; border-radius:2px; font-weight:700; color:var(--text-lt);">OPEN</span>
+        </div>
+        <span class="text-xs opacity-40">#{{ q.id }}</span>
+      </div>
+      <h3 style="margin: 0.5rem 0 0.25rem 0;">{{ q.title }}</h3>
+      {% if q.deadline_at %}
+        <div class="text-xs decoration-none mb-2" style="color:var(--danger); font-weight:600;">⌛ Deadline: {{ q.deadline_at.replace('T', ' ') }}</div>
+      {% endif %}
+      <p class="text-xs opacity-60 mb-4">{{ q.description }}</p>
+      <div class="flex justify-between items-center mt-auto">
+        <span class="text-xs opacity-60">From: {{ q.created_by_name or 'Guild' }}</span>
+        <span class="font-bold">{{ q.reward }} pts</span>
+      </div>
+      <form method="POST" action="/quests/{{ q.id }}/claim" class="mt-4">
+        <button type="submit" class="btn btn-primary w-full">{{ "Claim Quest" if lang == "en" else "クエストを受注" }}</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card">
+    <div class="empty-state">
+      <p>{{ "No quests available at the moment." if lang == "en" else "現在、利用可能なクエストはありません。" }}</p>
+      <p class="text-xs mt-2">{{ "Check back later for new tasks." if lang == "en" else "新しい依頼が出るまでお待ちください。" }}</p>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

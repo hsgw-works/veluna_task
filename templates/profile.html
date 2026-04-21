@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Veluna Task — Profile{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 2rem auto;">
+  <div class="page-header">
+    <h1>{{ "Your Profile" if lang == "en" else "プロフィール" }}</h1>
+    <p class="subtitle">{{ "Customize your identity in the guild" if lang == "en" else "ギルド内での性格をカスタマイズ" }}</p>
+  </div>
+
+  <div class="panel">
+    <form method="POST" action="/profile" style="display:flex; flex-direction:column; gap:1.5rem;">
+      <div class="flex items-center gap-6 mb-4">
+        <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--bg-secondary); border: 1px solid var(--border); overflow: hidden; flex-shrink: 0;">
+          {% if user.icon_url %}
+            <img src="{{ user.icon_url }}" style="width:100%; height:100%; object-fit:cover;">
+          {% endif %}
+        </div>
+        <div class="form-group w-full">
+          <label for="icon_url">{{ "Icon URL" if lang == "en" else "アイコンのURL" }}</label>
+          <input type="text" name="icon_url" value="{{ user.icon_url or '' }}" placeholder="https://example.com/icon.png">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="name">{{ "Character Name" if lang == "en" else "キャラクター名" }}</label>
+        <input type="text" name="name" value="{{ user.name }}" required>
+      </div>
+
+      <div class="form-group">
+        <label for="specialty">{{ "Specialty" if lang == "en" else "専門分野" }}</label>
+        <input type="text" name="specialty" value="{{ user.specialty or '' }}" placeholder="{{ 'Frontend Mage, Backend Warrior...' if lang == 'en' else 'フロントエンド魔法使い、バックエンド戦士...' }}">
+      </div>
+
+      <div class="form-group">
+        <label for="bio">{{ "Biography" if lang == "en" else "略歴" }}</label>
+        <textarea name="bio" rows="4" placeholder="{{ 'Tell the guild about yourself...' if lang == 'en' else '自分についてギルドに伝えよう...' }}">{{ user.bio or '' }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="discord_user_id">{{ "Discord User ID (Numerical)" if lang == "en" else "DiscordユーザーID (18桁の数字)" }}</label>
+        <input type="text" name="discord_user_id" value="{{ user.discord_user_id or '' }}" placeholder="123456789012345678">
+        <p class="text-xs opacity-50" style="margin-top:0.25rem;">{{ "Required for getting direct notifications from the Bot." if lang == "en" else "Botから直接通知を受け取るために必要です。" }}</p>
+      </div>
+
+      <div class="flex justify-between items-center mt-4">
+        <a href="/home" class="btn btn-outline" style="border: 1px solid var(--border); color: var(--text-lt);">{{ "Back" if lang == "en" else "戻る" }}</a>
+        <button type="submit" class="btn btn-primary">{{ "Save Changes" if lang == "en" else "変更を保存" }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Edit Quest — Admin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ "Edit Quest" if lang == "en" else "クエストの編集" }} <span style="opacity:0.5;">#{{ q.id }}</span></h1>
+  <p class="subtitle">{{ "Modify quest details" if lang == "en" else "クエストの詳細を変更します" }}</p>
+</div>
+
+<div class="panel">
+  <form method="POST" action="/admin/quests/{{ q.id }}/edit" style="display:flex; flex-direction:column; gap:1.5rem;">
+    
+    <div class="form-group">
+      <label for="title">{{ "Quest Title" if lang == "en" else "クエストのタイトル" }}</label>
+      <input type="text" id="title" name="title" value="{{ q.title }}" required>
+    </div>
+
+    <div class="form-group">
+      <label for="description">{{ "Description" if lang == "en" else "詳細な説明" }}</label>
+      <textarea id="description" name="description" rows="4" required>{{ q.description }}</textarea>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+      <div class="form-group">
+        <label for="type">{{ "Type" if lang == "en" else "クエスト種別" }}</label>
+        <select id="type" name="type" required>
+          <option value="NORMAL" {% if q.type == 'NORMAL' %}selected{% endif %}>NORMAL</option>
+          <option value="EMERGENCY" {% if q.type == 'EMERGENCY' %}selected{% endif %}>EMERGENCY</option>
+          <option value="SPECIAL" {% if q.type == 'SPECIAL' %}selected{% endif %}>SPECIAL</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="reward">{{ "Reward (Points)" if lang == "en" else "報酬ポイント" }}</label>
+        <input type="number" id="reward" name="reward" min="0" value="{{ q.reward }}" required>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="deadline">{{ "Deadline (Optional)" if lang == "en" else "期限 (オプション / 空欄可)" }}</label>
+      <!-- HTML datetime-local requires YYYY-MM-DDThh:mm format -->
+      <input type="datetime-local" id="deadline" name="deadline" value="{{ q.deadline_at if q.deadline_at else '' }}">
+    </div>
+
+    <div class="flex gap-4 items-center">
+      <button type="submit" class="btn btn-primary">{{ "Save Changes" if lang == "en" else "変更を保存する" }}</button>
+      <a href="/admin" class="btn btn-outline" style="text-decoration:none;">{{ "Cancel" if lang == "en" else "キャンセル" }}</a>
+    </div>
+
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Veluna Task — Enter{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+  <div class="page-header">
+    <h1>Veluna Task</h1>
+    <p class="subtitle">{{ "Enter your credentials or begin a new journey" if lang == "en" else "資格情報を入力するか、新たな旅を始めましょう" }}</p>
+  </div>
+
+  <div class="panel" id="auth-panel">
+    <div class="tabs mb-4">
+      <button class="tab-btn active" onclick="showTab('login')">{{ "Login" if lang == "en" else "ログイン" }}</button>
+      <button class="tab-btn" onclick="showTab('signup')">{{ "Sign Up" if lang == "en" else "新規登録" }}</button>
+    </div>
+
+    <!-- Login Form -->
+    <form id="login-form" method="POST" action="/login" class="auth-form">
+      <div class="form-group">
+        <label for="name">{{ "Character Name" if lang == "en" else "キャラクター名" }}</label>
+        <input type="text" name="name" required placeholder="Alice">
+      </div>
+      <div class="form-group">
+        <label for="password">{{ "PIN (4 digits)" if lang == "en" else "PIN (数字4桁)" }}</label>
+        <input type="password" name="password" required maxlength="4" pattern="\d{4}">
+      </div>
+      <button type="submit" class="btn btn-primary w-full mt-4">{{ "Begin Adventure" if lang == "en" else "冒険を開始する" }}</button>
+      
+      <div class="mt-4 pt-4 border-t opacity-60 text-center">
+        <a href="/auth/google" class="btn btn-outline w-full" style="border: 1px solid var(--border); display: block; text-decoration: none;">
+          Sign in with Google
+        </a>
+      </div>
+    </form>
+
+    <!-- Signup Form -->
+    <form id="signup-form" method="POST" action="/signup" class="auth-form hidden">
+      <div class="form-group">
+        <label for="name">{{ "New Character Name" if lang == "en" else "新しいキャラクター名" }}</label>
+        <input type="text" name="name" required placeholder="Alice">
+      </div>
+      <div class="form-group">
+        <label for="password">{{ "Set PIN (4 digits)" if lang == "en" else "PINを設定 (数字4桁)" }}</label>
+        <input type="password" name="password" required maxlength="4" pattern="\d{4}">
+      </div>
+      <button type="submit" class="btn btn-primary w-full mt-4">{{ "Create Character" if lang == "en" else "キャラクターを作成する" }}</button>
+    </form>
+  </div>
+  
+  <p class="text-xs opacity-60 text-center mt-4">
+    Biometric login available on compatible devices.
+  </p>
+</div>
+
+<script>
+function showTab(tab) {
+  const loginForm = document.getElementById('login-form');
+  const signupForm = document.getElementById('signup-form');
+  const btns = document.querySelectorAll('.tab-btn');
+  
+  btns.forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.textContent.toLowerCase().includes(tab)) {
+      btn.classList.add('active');
+    }
+  });
+  
+  if (tab === 'login') {
+    loginForm.classList.remove('hidden');
+    signupForm.classList.add('hidden');
+  } else {
+    loginForm.classList.add('hidden');
+    signupForm.classList.remove('hidden');
+  }
+}
+</script>
+
+<style>
+  .auth-container { max-width: 400px; margin: 4rem auto; }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .tab-btn { 
+    flex: 1; padding: 0.75rem; background: none; border: none; 
+    cursor: pointer; color: var(--text-lt); font-weight: 600; font-size: 0.9rem;
+    border-bottom: 2px solid transparent; transition: all 0.2s;
+  }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--text); }
+  .hidden { display: none !important; }
+  .auth-form { padding-top: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+  .border-t { border-top: 1px solid var(--border); }
+</style>
+{% endblock %}

@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Veluna Task{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap"
+    rel="stylesheet">
+  <style>
+    /* ─── Minimalist Tokens (Your Chronicle Style) ─── */
+    :root {
+      --bg: #ffffff;
+      --bg-alt: #f9fafb;
+      --text: #1a1a1a;
+      --text-lt: #666666;
+      --border: #dddddd;
+      --primary: #333333;
+      --accent: #000000;
+      --danger: #ef4444;
+      --success: #10b981;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      background-image: none !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+      color: var(--text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── Phantom Glow Kill ─── */
+    html::before,
+    html::after,
+    body::before,
+    body::after {
+      display: none !important;
+      content: none !important;
+      background: none !important;
+      box-shadow: none !important;
+    }
+
+    * {
+      outline-color: var(--text) !important;
+    }
+
+    /* Kill blue focus outlines */
+
+    /* ─── Header ─── */
+    header {
+      background: var(--bg);
+      background-image: none !important;
+      /* Kill any gradients */
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .site-title {
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--text);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .site-title span {
+      display: none;
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    nav a {
+      font-size: 0.85rem;
+      color: var(--text-lt);
+      text-decoration: none;
+      padding: 0.4rem 0.6rem;
+      border-radius: 4px;
+      transition: all 0.1s;
+    }
+
+    nav a:hover {
+      color: var(--text);
+      background: var(--bg-alt);
+    }
+
+    nav a.active {
+      color: var(--text);
+      font-weight: 600;
+      background: var(--bg-alt);
+    }
+
+    .user-badge {
+      font-size: 0.75rem;
+      color: var(--text-lt);
+      padding: 0.3rem 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg-alt);
+      display: flex;
+      flex-direction: column;
+      line-height: 1.3;
+    }
+
+    .user-badge .role-admin {
+      color: #f59e0b;
+      font-weight: bold;
+    }
+
+    /* ─── Main Container ─── */
+    main {
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 0 1.5rem 4rem;
+    }
+
+    /* ─── Typography ─── */
+    h1,
+    h2,
+    h3 {
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .page-header {
+      margin-bottom: 2rem;
+      border-bottom: 2px solid var(--text);
+      padding-bottom: 0.5rem;
+    }
+
+    .page-header h1 {
+      font-size: 1.5rem;
+      letter-spacing: -0.01em;
+    }
+
+    .page-header .subtitle {
+      color: var(--text-lt);
+      font-size: 0.9rem;
+      margin-top: 0.25rem;
+    }
+
+    .ornament {
+      display: none;
+    }
+
+    /* No ornaments in minimalist style */
+
+    /* ─── Containers ─── */
+    .card,
+    .panel,
+    .quest-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+      animation: fadeIn 0.4s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .quest-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+
+    .quest-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .quest-card:hover {
+      border-color: var(--text-lt);
+      transform: translateY(-2px);
+    }
+
+    /* Emergency Glow Animation */
+    @keyframes pulse-red {
+      0% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+        border-color: rgba(239, 68, 68, 0.4);
+      }
+
+      70% {
+        box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+        border-color: rgba(239, 68, 68, 1);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+        border-color: rgba(239, 68, 68, 0.4);
+      }
+    }
+
+    .quest-card.emergency {
+      border: 1px solid var(--danger);
+      animation: pulse-red 2s infinite;
+    }
+
+    .quest-card.emergency:hover {
+      animation: none;
+      border-color: var(--danger);
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+    }
+
+    /* ─── Badges ─── */
+    .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.1rem 0.4rem;
+      border-radius: 3px;
+      border: 1px solid;
+      text-transform: uppercase;
+    }
+
+    .badge-open {
+      color: var(--success);
+      border-color: var(--success);
+    }
+
+    .badge-claimed {
+      color: #b45309;
+      border-color: #f59e0b;
+    }
+
+    .badge-submitted {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .badge-approved {
+      background: var(--success);
+      color: white;
+      border: none;
+    }
+
+    .badge-rejected {
+      background: var(--danger);
+      color: white;
+      border: none;
+    }
+
+    /* ─── Buttons ─── */
+    .btn {
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn:hover {
+      background: var(--bg-alt);
+      border-color: var(--text-lt);
+    }
+
+    .btn-primary {
+      background: var(--text);
+      color: var(--bg);
+      border-color: var(--text);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent);
+      color: var(--bg);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .btn-success {
+      color: var(--success);
+      border-color: var(--success);
+    }
+
+    .btn-danger {
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+
+    .btn-outline {
+      color: var(--text-lt);
+    }
+
+    /* ─── Forms ─── */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .form-group label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text);
+      text-transform: uppercase;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.5rem 0.75rem;
+      font-family: inherit;
+      font-size: 0.95rem;
+      outline: none;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      border-color: var(--text);
+    }
+
+    /* ─── Tables ─── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    th {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-lt);
+      border-bottom: 2px solid var(--border);
+      padding: 0.75rem 0.5rem;
+      text-align: left;
+      text-transform: uppercase;
+    }
+
+    td {
+      padding: 0.75rem 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ─── Utils ─── */
+    .flex {
+      display: flex;
+    }
+
+    .items-center {
+      align-items: center;
+    }
+
+    .justify-between {
+      justify-content: space-between;
+    }
+
+    .gap-2 {
+      gap: 0.5rem;
+    }
+
+    .mt-4 {
+      margin-top: 1rem;
+    }
+
+    .mb-4 {
+      margin-bottom: 1rem;
+    }
+
+    .text-sm {
+      font-size: 0.85rem;
+    }
+
+    .text-xs {
+      font-size: 0.75rem;
+    }
+
+    .opacity-60 {
+      opacity: 0.6;
+    }
+
+    .w-full {
+      width: 100%;
+    }
+
+    .user-badge {
+      position: relative;
+      cursor: pointer;
+    }
+
+    .avatar-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1rem;
+      transition: all 0.2s;
+    }
+
+    .avatar-icon:hover {
+      border-color: var(--text);
+      background: var(--bg);
+    }
+
+    .user-dropdown {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 0.5rem;
+      width: 200px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      padding: 1rem;
+      display: none;
+      flex-direction: column;
+      gap: 0.5rem;
+      z-index: 200;
+    }
+
+    .user-dropdown.show {
+      display: flex;
+    }
+
+    .user-dropdown hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0.5rem 0;
+    }
+
+    .gear-btn {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      width: 3.2rem;
+      height: 3.2rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+      cursor: pointer;
+      z-index: 1000;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      color: var(--text-lt);
+    }
+
+    .gear-btn:hover {
+      border-color: var(--text);
+      color: var(--text);
+      transform: rotate(90deg);
+    }
+
+    .gear-menu {
+      position: fixed;
+      bottom: 5.2rem;
+      right: 1.5rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem;
+      display: none;
+      flex-direction: column;
+      gap: 0.25rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+      min-width: 150px;
+      animation: slide-up 0.2s ease-out;
+    }
+
+    @keyframes slide-up {
+      from {
+        transform: translateY(10px);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .gear-menu.show {
+      display: flex;
+    }
+
+    .gear-menu a {
+      font-size: 0.85rem;
+      padding: 0.6rem 0.8rem;
+      text-decoration: none;
+      color: var(--text);
+      border-radius: 4px;
+      transition: background 0.1s;
+    }
+
+    .gear-menu a:hover {
+      background: var(--bg-alt);
+    }
+
+    @media (max-width: 600px) {
+      main {
+        padding: 0 1rem 2rem;
+      }
+
+      header {
+        padding: 0.5rem 1rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <a class="site-title" href="/">Veluna Task</a>
+    <nav>
+      {% if user %}
+      <nav
+        style="display:flex; align-items:center; gap:1.5rem; border-right: 1px solid var(--border); padding-right: 1.5rem; margin-right: 0.5rem;">
+        <a href="/board">{{ "Quests" if lang == "en" else "クエスト" }}</a>
+        <a href="/rankings">{{ "Rankings" if lang == "en" else "ランキング" }}</a>
+        <a href="/my-quests">{{ "My Quests" if lang == "en" else "自分のクエスト" }}</a>
+        <a href="/profile">{{ "Profile" if lang == "en" else "プロフィール" }}</a>
+        {% if user.role == 'admin' %}
+        <a href="/admin" style="font-weight: 700;">{{ "Admin" if lang == "en" else "管理画面" }}</a>
+        {% endif %}
+      </nav>
+
+      <div class="user-badge" id="user-badge">
+        <div class="avatar-icon">
+          {% if user.icon_url %}
+          <img src="{{ user.icon_url }}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
+          {% else %}
+          {{ user.name[0] | upper }}
+          {% endif %}
+        </div>
+        <div class="user-dropdown" id="user-dropdown">
+          <div style="font-weight:700; font-size:0.95rem;">{{ user.name }}</div>
+          <div class="text-xs opacity-60">{{ user.title }}</div>
+          <div class="flex justify-between items-center mt-2">
+            <span class="text-xs font-bold">Lv. {{ user.level }}</span>
+            <span class="text-xs opacity-60">{{ user.points }} pts</span>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </nav>
+  </header>
+
+  <div class="gear-btn" id="gear-btn">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"></circle>
+      <path
+        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+      </path>
+    </svg>
+  </div>
+
+  <div class="gear-menu" id="gear-menu">
+    <a href="/toggle-lang"> {{ "English ↔ 日本語" if lang == "en" else "日本語 ↔ English" }}</a>
+    <hr style="margin: 0.25rem 0; border:none; border-top: 1px solid var(--border);">
+    {% if user %}
+    <a href="/logout" style="color: var(--danger);"> {{ "Logout" if lang == "en" else "ログアウト" }}</a>
+    {% endif %}
+  </div>
+
+  <script>
+    // Toggle User Dropdown
+    const badge = document.getElementById('user-badge');
+    const dropdown = document.getElementById('user-dropdown');
+    if (badge && dropdown) {
+      badge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.toggle('show');
+        gearMenu.classList.remove('show');
+      });
+    }
+
+    // Toggle Gear Menu
+    const gearBtn = document.getElementById('gear-btn');
+    const gearMenu = document.getElementById('gear-menu');
+    gearBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      gearMenu.classList.toggle('show');
+      if (dropdown) dropdown.classList.remove('show');
+    });
+
+    document.addEventListener('click', () => {
+      if (dropdown) dropdown.classList.remove('show');
+      gearMenu.classList.remove('show');
+    });
+  </script>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+</body>
+
+</html>
