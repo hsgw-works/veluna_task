@@ -24,6 +24,8 @@ GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "REPLACE_ME")
 ADMIN_DISCORD_ID = os.getenv("ADMIN_DISCORD_ID", "REPLACE_ME")
 BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
 EXEC_CHANNEL_ID = os.getenv("EXEC_CHANNEL_ID", "REPLACE_ME")
+# データベース接続URL（クラウド用）
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # クラウド用の永続データ保存先 (Railwayの /data 等)
 DATA_DIR = os.getenv("DATA_DIR", ".")
@@ -143,10 +145,30 @@ async def auth_exception_handler(request: Request, exc: HTTPException):
 # ────────────────────────────────────────────
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row  # 辞書ライクなアクセス
-    conn.execute("PRAGMA journal_mode=WAL")  # 軽量な同時書き込み対応
-    return conn
+    if DATABASE_URL:
+        # PostgreSQL (Cloud)
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        # Render等の環境変数によっては 'postgres://' で始まることがあるが、
+        # psycopg2 は 'postgresql://' を推奨するため自動置換
+        db_url = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
+        conn.autocommit = True # Raw SQL の場合は自動コミットを推奨
+        return conn
+    else:
+        # SQLite (Local)
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
+def execute_query(conn, query, params=None):
+    """DBによってプレースホルダ (? か %s) を切り替える"""
+    if DATABASE_URL:
+        query = query.replace("?", "%s")
+    cursor = conn.cursor()
+    cursor.execute(query, params or ())
+    return cursor
 
 
 def init_db():
@@ -154,9 +176,10 @@ def init_db():
     conn = get_db()
     cur = conn.cursor()
 
-    cur.executescript("""
+    # PostgreSQL互換のデータ型に置換 (SQLiteの場合は無視される)
+    script = """
         CREATE TABLE IF NOT EXISTS users (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            id            SERIAL PRIMARY KEY,
             name          TEXT NOT NULL,
             role          TEXT NOT NULL CHECK(role IN ('admin', 'user')),
             password_hash TEXT,
@@ -167,12 +190,12 @@ def init_db():
             specialty     TEXT,
             bio           TEXT,
             icon_url      TEXT,
-            last_active_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             discord_user_id TEXT
         );
 
         CREATE TABLE IF NOT EXISTS quests (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            id            SERIAL PRIMARY KEY,
             title         TEXT NOT NULL,
             description   TEXT,
             status        TEXT NOT NULL DEFAULT 'OPEN'
@@ -182,74 +205,73 @@ def init_db():
             reward        INTEGER DEFAULT 10,
             created_by    INTEGER NOT NULL REFERENCES users(id),
             claimed_by    INTEGER REFERENCES users(id),
-            delivered_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-            deadline_at   DATETIME
+            delivered_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            deadline_at   TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS submissions (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            id            SERIAL PRIMARY KEY,
             quest_id      INTEGER NOT NULL REFERENCES quests(id),
             user_id       INTEGER NOT NULL REFERENCES users(id),
             content       TEXT NOT NULL,
             status        TEXT NOT NULL DEFAULT 'SUBMITTED'
                           CHECK(status IN ('SUBMITTED','APPROVED','REJECTED')),
-            claimed_at    DATETIME,
-            submitted_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-            approved_at   DATETIME
+            claimed_at    TIMESTAMP,
+            submitted_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            approved_at   TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS announcements (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            id            SERIAL PRIMARY KEY,
             title         TEXT NOT NULL,
             content       TEXT NOT NULL,
-            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS announcement_reads (
             announcement_id INTEGER NOT NULL REFERENCES announcements(id),
             user_id         INTEGER NOT NULL REFERENCES users(id),
-            read_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+            read_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (announcement_id, user_id)
         );
-    """)
+    """
+    
+    if not DATABASE_URL:
+        # SQLite変換
+        script = script.replace("SERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
+        script = script.replace("TIMESTAMP", "DATETIME")
+        conn.executescript(script)
+    else:
+        # PostgreSQL直接実行
+        with conn.cursor() as cur:
+            cur.execute(script)
 
-    # 全ての既存ユーザー（Teaquen以外）の権限を'user'にリセット
-    cur.execute("UPDATE users SET role = 'user' WHERE name != 'Teaquen'")
+    # 以降、execute_queryを使用して共通化
+    execute_query(conn, "UPDATE users SET role = 'user' WHERE name != 'Teaquen'")
+    
+    existing = execute_query(conn, "SELECT id, password_hash FROM users WHERE name = 'Teaquen'").fetchone()
 
-    # 管理者 Teaquen の確認・作成
-    # 毎起動でパスワードを再ハッシュしない（既存ハッシュが正常なら変更しない）
-    cur.execute("DELETE FROM users WHERE name = 'Teaqun'")  # 旧名削除のみ
-    existing = cur.execute("SELECT id, password_hash FROM users WHERE name = 'Teaquen'").fetchone()
     if existing:
         # ロールと称号だけ修正。パスワードは照合できないときのみ更新
         needs_pw_update = not existing["password_hash"] or not verify_password("0924", existing["password_hash"])
         if needs_pw_update:
             new_hash = hash_password("0924")
-            cur.execute(
-                "UPDATE users SET role='admin', password_hash=?, title='High Administrator', level=99, points=1000 WHERE name='Teaquen'",
-                (new_hash,)
-            )
+            execute_query(conn, "UPDATE users SET role='admin', password_hash=?, title='High Administrator', level=99, points=1000 WHERE name='Teaquen'", (new_hash,))
         else:
-            cur.execute(
-                "UPDATE users SET role='admin', title='High Administrator' WHERE name='Teaquen'"
-            )
+            execute_query(conn, "UPDATE users SET role='admin', title='High Administrator' WHERE name='Teaquen'")
     else:
         new_hash = hash_password("0924")
-        cur.execute(
-            "INSERT INTO users (name, role, password_hash, points, level, title) VALUES (?, ?, ?, ?, ?, ?)",
-            ("Teaquen", "admin", new_hash, 1000, 99, "High Administrator")
-        )
+        execute_query(conn, "INSERT INTO users (name, role, password_hash, points, level, title) VALUES (?, ?, ?, ?, ?, ?)", ("Teaquen", "admin", new_hash, 1000, 99, "High Administrator"))
 
-    # 他の初期ユーザー（必要であれば）
-    if not cur.execute("SELECT 1 FROM users WHERE name != 'Teaquen' LIMIT 1").fetchone():
-        cur.executemany(
-            "INSERT INTO users (name, role) VALUES (?, ?)",
-            [
-                ("セラフィナ", "user"),
-                ("魔法使いカル", "user"),
-                ("弓使いダナ",   "user"),
-            ]
-        )
+    # 他の初期ユーザー
+    if not execute_query(conn, "SELECT 1 FROM users WHERE name != 'Teaquen' LIMIT 1").fetchone():
+        users_to_add = [
+            ("セラフィナ", "user"),
+            ("魔法使いカル", "user"),
+            ("弓使いダナ",   "user"),
+        ]
+        for u in users_to_add:
+            execute_query(conn, "INSERT INTO users (name, role) VALUES (?, ?)", u)
 
     conn.commit()
     conn.close()
@@ -264,11 +286,16 @@ def current_user(request: Request):
     uid = request.cookies.get("user_id")
     if not uid:
         return None
+    try:
+        user_id = int(uid)
+    except (ValueError, TypeError):
+        return None
+
     conn = get_db()
     # 最終アクティブ日時を更新
-    conn.execute("UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?", (uid,))
+    execute_query(conn, "UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?", (user_id,))
     conn.commit()
-    user = conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    user = execute_query(conn, "SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     conn.close()
     return user
 
@@ -322,28 +349,22 @@ def home_portal(request: Request):
     user = require_user(request)
     lang = request.cookies.get("preferred_lang", "ja")
     conn = get_db()
-    # Stats
-    my_active = conn.execute(
-        "SELECT COUNT(*) FROM quests WHERE claimed_by = ? AND status IN ('CLAIMED','SUBMITTED')",
-        (user["id"],)
-    ).fetchone()[0]
+    # Stats - COUNT(*) as count とエイリアスをつけて辞書形式で取得
+    res = execute_query(conn, "SELECT COUNT(*) as count FROM quests WHERE claimed_by = ? AND status IN ('CLAIMED','SUBMITTED')", (user["id"],)).fetchone()
+    my_active = res["count"] if res else 0
     
     # Recent quests
-    recent_quests = conn.execute(
-        "SELECT * FROM quests WHERE status = 'OPEN' ORDER BY delivered_at DESC LIMIT 3"
-    ).fetchall()
+    recent_quests = execute_query(conn, "SELECT * FROM quests WHERE status = 'OPEN' ORDER BY delivered_at DESC LIMIT 3").fetchall()
     
     # Recent announcements
-    announcements = conn.execute(
-        "SELECT * FROM announcements ORDER BY created_at DESC LIMIT 3"
-    ).fetchall()
+    announcements = execute_query(conn, "SELECT * FROM announcements ORDER BY created_at DESC LIMIT 3").fetchall()
     
     # All members (for the online member strip)
-    all_members = conn.execute(
-        """SELECT id, name, icon_url, level, title, role, 
+    all_members = execute_query(conn, """SELECT id, name, icon_url, level, title, role, 
+           (last_active_at >= (CURRENT_TIMESTAMP - INTERVAL '5 minutes')) as is_online 
+           FROM users ORDER BY role DESC, points DESC""" if DATABASE_URL else """SELECT id, name, icon_url, level, title, role, 
            (last_active_at >= datetime('now', '-5 minutes')) as is_online 
-           FROM users ORDER BY role DESC, points DESC"""
-    ).fetchall()
+           FROM users ORDER BY role DESC, points DESC""").fetchall()
     
     conn.close()
     return templates.TemplateResponse(request, "home.html", {
@@ -360,18 +381,15 @@ def home_portal(request: Request):
 def signup(name: str = Form(...), password: str = Form(...)):
     conn = get_db()
     # Check if user exists
-    if conn.execute("SELECT 1 FROM users WHERE name = ?", (name,)).fetchone():
+    if execute_query(conn, "SELECT 1 FROM users WHERE name = ?", (name,)).fetchone():
         conn.close()
         raise HTTPException(status_code=400, detail="User already exists")
     
     hashed = hash_password(password)
     # 常に 'user' ロールで作成（Teaquenのみが管理者のため）
-    conn.execute(
-        "INSERT INTO users (name, role, password_hash) VALUES (?, 'user', ?)",
-        (name, hashed)
-    )
+    execute_query(conn, "INSERT INTO users (name, role, password_hash) VALUES (?, 'user', ?)", (name, hashed))
     conn.commit()
-    user = conn.execute("SELECT * FROM users WHERE name = ?", (name,)).fetchone()
+    user = execute_query(conn, "SELECT * FROM users WHERE name = ?", (name,)).fetchone()
     conn.close()
     
     resp = RedirectResponse(url="/home", status_code=303)
@@ -391,7 +409,7 @@ def auth_google(request: Request):
 def login(request: Request, name: str = Form(...), password: str = Form(...)):
     name = name.strip() # Handle trailing spaces
     conn = get_db()
-    user = conn.execute("SELECT * FROM users WHERE name = ?", (name,)).fetchone()
+    user = execute_query(conn, "SELECT * FROM users WHERE name = ?", (name,)).fetchone()
     conn.close()
     
     lang = request.cookies.get("preferred_lang", "ja")
@@ -436,10 +454,7 @@ def update_profile(
 ):
     user = require_user(request)
     conn = get_db()
-    conn.execute(
-        "UPDATE users SET name = ?, specialty = ?, bio = ?, icon_url = ?, discord_user_id = ? WHERE id = ?",
-        (name, specialty, bio, icon_url, discord_user_id, user["id"])
-    )
+    execute_query(conn, "UPDATE users SET name = ?, specialty = ?, bio = ?, icon_url = ?, discord_user_id = ? WHERE id = ?", (name, specialty, bio, icon_url, discord_user_id, user["id"]))
     conn.commit()
     conn.close()
     return RedirectResponse(url="/profile", status_code=303)
@@ -457,11 +472,9 @@ def board(request: Request):
     user = require_user(request)
     lang = request.cookies.get("preferred_lang", "ja")
     conn = get_db()
-    quests = conn.execute(
-        "SELECT q.*, u.name AS creator_name FROM quests q "
+    quests = execute_query(conn, "SELECT q.*, u.name AS creator_name FROM quests q "
         "JOIN users u ON q.created_by = u.id "
-        "WHERE q.status = 'OPEN' ORDER BY q.id DESC"
-    ).fetchall()
+        "WHERE q.status = 'OPEN' ORDER BY q.id DESC").fetchall()
     conn.close()
     return templates.TemplateResponse(request, "board.html", {"user": user, "quests": quests, "lang": lang})
 
@@ -471,12 +484,9 @@ def my_quests(request: Request):
     user = require_user(request)
     lang = request.cookies.get("preferred_lang", "ja")
     conn = get_db()
-    quests = conn.execute(
-        "SELECT q.*, u.name AS creator_name FROM quests q "
+    quests = execute_query(conn, "SELECT q.*, u.name AS creator_name FROM quests q "
         "JOIN users u ON q.created_by = u.id "
-        "WHERE q.claimed_by = ? ORDER BY q.id DESC",
-        (user["id"],)
-    ).fetchall()
+        "WHERE q.claimed_by = ? ORDER BY q.id DESC", (user["id"],)).fetchall()
     conn.close()
     return templates.TemplateResponse(request, "my_quests.html", {"user": user, "quests": quests, "lang": lang})
 
@@ -486,7 +496,7 @@ def admin_dashboard(request: Request):
     user = require_admin(request)
     conn = get_db()
     # 提出済みクエストと提出内容を結合して取得
-    submitted = conn.execute("""
+    submitted = execute_query(conn, """
         SELECT s.id AS sub_id, s.content, s.status AS sub_status,
                q.id AS quest_id, q.title,
                u.name AS user_name
@@ -496,13 +506,11 @@ def admin_dashboard(request: Request):
         WHERE s.status = 'SUBMITTED'
         ORDER BY s.id DESC
     """).fetchall()
-    all_quests = conn.execute(
-        "SELECT q.*, u.name AS creator_name FROM quests q "
-        "JOIN users u ON q.created_by = u.id ORDER BY q.id DESC"
-    ).fetchall()
+    all_quests = execute_query(conn, "SELECT q.*, u.name AS creator_name FROM quests q "
+        "JOIN users u ON q.created_by = u.id ORDER BY q.id DESC").fetchall()
     
     # メンバー名簿の取得
-    members = conn.execute("SELECT * FROM users ORDER BY level DESC, points DESC").fetchall()
+    members = execute_query(conn, "SELECT * FROM users ORDER BY level DESC, points DESC").fetchall()
     
     conn.close()
     return templates.TemplateResponse(request, "admin.html", {
@@ -522,10 +530,8 @@ def admin_dashboard(request: Request):
 def list_quests(request: Request):
     user = require_user(request)
     conn = get_db()
-    quests = conn.execute(
-        "SELECT q.*, u.name AS creator_name FROM quests q "
-        "JOIN users u ON q.created_by = u.id WHERE q.status = 'OPEN'"
-    ).fetchall()
+    quests = execute_query(conn, "SELECT q.*, u.name AS creator_name FROM quests q "
+        "JOIN users u ON q.created_by = u.id WHERE q.status = 'OPEN'").fetchall()
     conn.close()
     return [dict(q) for q in quests]
 
@@ -536,7 +542,7 @@ def rankings_page(request: Request):
     lang = request.cookies.get("preferred_lang", "ja")
     conn = get_db()
     # ポイントとレベルでソート。完了クエスト数もカウント。
-    members = conn.execute("""
+    members = execute_query(conn, """
         SELECT u.*, 
                (SELECT COUNT(*) FROM submissions s WHERE s.user_id = u.id AND s.status = 'APPROVED') as completed_quests
         FROM users u 
@@ -560,10 +566,7 @@ def create_quest(
     user = require_admin(request)
     conn = get_db()
     for _ in range(quantity):
-        conn.execute(
-            "INSERT INTO quests (title, description, type, reward, created_by, deadline_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (title, description, type, reward, user["id"], deadline)
-        )
+        execute_query(conn, "INSERT INTO quests (title, description, type, reward, created_by, deadline_at) VALUES (?, ?, ?, ?, ?, ?)", (title, description, type, reward, user["id"], deadline))
     conn.commit()
     conn.close()
     
@@ -582,10 +585,7 @@ def create_announcement(
 ):
     require_admin(request)
     conn = get_db()
-    conn.execute(
-        "INSERT INTO announcements (title, content) VALUES (?, ?)",
-        (title, content)
-    )
+    execute_query(conn, "INSERT INTO announcements (title, content) VALUES (?, ?)", (title, content))
     conn.commit()
     conn.close()
     
@@ -599,13 +599,10 @@ def check_announcement(ann_id: int, request: Request):
     user = require_user(request)
     conn = get_db()
     try:
-        conn.execute(
-            "INSERT INTO announcement_reads (announcement_id, user_id) VALUES (?, ?)",
-            (ann_id, user["id"])
-        )
+        execute_query(conn, "INSERT INTO announcement_reads (announcement_id, user_id) VALUES (?, ?)", (ann_id, user["id"]))
         conn.commit()
-    except sqlite3.IntegrityError:
-        pass # Already read
+    except:
+        pass # Already read or unique constraint
     conn.close()
     return RedirectResponse(url="/home", status_code=303)
 
@@ -617,7 +614,7 @@ def edit_quest_page(quest_id: int, request: Request):
     user = require_admin(request)
     lang = request.cookies.get("preferred_lang", "ja")
     conn = get_db()
-    quest = conn.execute("SELECT * FROM quests WHERE id = ?", (quest_id,)).fetchone()
+    quest = execute_query(conn, "SELECT * FROM quests WHERE id = ?", (quest_id,)).fetchone()
     conn.close()
     if not quest:
         raise HTTPException(status_code=404, detail="Quest not found")
@@ -636,10 +633,7 @@ def edit_quest_submit(
 ):
     require_admin(request)
     conn = get_db()
-    conn.execute(
-        "UPDATE quests SET title = ?, description = ?, type = ?, reward = ?, deadline_at = ? WHERE id = ?",
-        (title, description, type, reward, deadline if deadline else None, quest_id)
-    )
+    execute_query(conn, "UPDATE quests SET title = ?, description = ?, type = ?, reward = ?, deadline_at = ? WHERE id = ?", (title, description, type, reward, deadline if deadline else None, quest_id))
     conn.commit()
     conn.close()
     return RedirectResponse(url="/admin", status_code=303)
@@ -711,7 +705,7 @@ if bot:
             return
             
         conn = get_db()
-        quest = conn.execute("SELECT * FROM quests WHERE id = ?", (quest_id,)).fetchone()
+        quest = execute_query(conn, "SELECT * FROM quests WHERE id = ?", (quest_id,)).fetchone()
         
         if not quest:
             conn.close()
@@ -724,7 +718,7 @@ if bot:
             return
             
         user_id = quest["claimed_by"]
-        user = conn.execute("SELECT name FROM users WHERE id = ?", (user_id,)).fetchone()
+        user = execute_query(conn, "SELECT name FROM users WHERE id = ?", (user_id,)).fetchone()
         
         # ローカル(OneDrive連携)への保存プロセス
         await ctx.send(" ファイルをサーバーの専用フォルダに保存しています...")
@@ -745,11 +739,8 @@ if bot:
         # 提出記録を追加 (URLを保持)
         from datetime import datetime
         now = datetime.now().isoformat()
-        conn.execute(
-            "INSERT INTO submissions (quest_id, user_id, content, submitted_at) VALUES (?, ?, ?, ?)",
-            (quest_id, user_id, content_url, now)
-        )
-        conn.execute("UPDATE quests SET status = 'SUBMITTED' WHERE id = ?", (quest_id,))
+        execute_query(conn, "INSERT INTO submissions (quest_id, user_id, content, submitted_at) VALUES (?, ?, ?, ?)", (quest_id, user_id, content_url, now))
+        execute_query(conn, "UPDATE quests SET status = 'SUBMITTED' WHERE id = ?", (quest_id,))
         conn.commit()
         conn.close()
         
@@ -790,18 +781,12 @@ def claim_quest(quest_id: int, request: Request):
         raise HTTPException(status_code=403, detail="管理者はクエストを受注できません")
         
     conn = get_db()
-    quest = conn.execute("SELECT * FROM quests WHERE id = ?", (quest_id,)).fetchone()
+    quest = execute_query(conn, "SELECT * FROM quests WHERE id = ?", (quest_id,)).fetchone()
     if not quest or quest["status"] != "OPEN":
         conn.close()
         raise HTTPException(status_code=400, detail="Quest not available")
     
-    conn.execute(
-        "UPDATE quests SET status = 'CLAIMED', claimed_by = ? WHERE id = ?",
-        (user["id"], quest_id)
-    )
-    # Record claim time in existing submission or start tracking? 
-    # Actually, we record it when a submission is created or in the quest itself?
-    # Let's keep it simple: the quest table has claimed_by.
+    execute_query(conn, "UPDATE quests SET status = 'CLAIMED', claimed_by = ? WHERE id = ?", (user["id"], quest_id))
     conn.commit()
     conn.close()
     return RedirectResponse(url="/my-quests", status_code=303)
@@ -811,10 +796,7 @@ def claim_quest(quest_id: int, request: Request):
 def cancel_claim(quest_id: int, request: Request):
     user = require_user(request)
     conn = get_db()
-    conn.execute(
-        "UPDATE quests SET status = 'OPEN', claimed_by = NULL WHERE id = ? AND claimed_by = ? AND status IN ('CLAIMED', 'REJECTED')",
-        (quest_id, user["id"])
-    )
+    execute_query(conn, "UPDATE quests SET status = 'OPEN', claimed_by = NULL WHERE id = ? AND claimed_by = ? AND status IN ('CLAIMED', 'REJECTED')", (quest_id, user["id"]))
     conn.commit()
     conn.close()
     return RedirectResponse(url="/my-quests", status_code=303)
@@ -824,15 +806,13 @@ def cancel_claim(quest_id: int, request: Request):
 def unsubmit_quest(quest_id: int, request: Request):
     user = require_user(request)
     conn = get_db()
-    quest = conn.execute("SELECT * FROM quests WHERE id = ?", (quest_id,)).fetchone()
+    quest = execute_query(conn, "SELECT * FROM quests WHERE id = ?", (quest_id,)).fetchone()
     if not quest or quest["status"] != "SUBMITTED" or quest["claimed_by"] != user["id"]:
         conn.close()
         raise HTTPException(status_code=400, detail="Cannot unsubmit this quest")
     
-    # 提出レコードを削除（物理的にファイルを消す処理は複雑になるため不要とする）
-    conn.execute("DELETE FROM submissions WHERE quest_id = ?", (quest_id,))
-    # クエストのステータスを受注中（CLAIMED）に戻す
-    conn.execute("UPDATE quests SET status = 'CLAIMED' WHERE id = ?", (quest_id,))
+    execute_query(conn, "DELETE FROM submissions WHERE quest_id = ?", (quest_id,))
+    execute_query(conn, "UPDATE quests SET status = 'CLAIMED' WHERE id = ?", (quest_id,))
     conn.commit()
     conn.close()
     return RedirectResponse(url="/my-quests", status_code=303)
@@ -842,15 +822,12 @@ def unsubmit_quest(quest_id: int, request: Request):
 def duplicate_quest(quest_id: int, request: Request):
     require_admin(request)
     conn = get_db()
-    quest = conn.execute("SELECT * FROM quests WHERE id = ?", (quest_id,)).fetchone()
+    quest = execute_query(conn, "SELECT * FROM quests WHERE id = ?", (quest_id,)).fetchone()
     if not quest:
         conn.close()
         raise HTTPException(status_code=404)
         
-    conn.execute(
-        "INSERT INTO quests (title, description, type, reward, created_by) VALUES (?, ?, ?, ?, ?)",
-        (quest["title"], quest["description"], quest["type"], quest["reward"], quest["created_by"])
-    )
+    execute_query(conn, "INSERT INTO quests (title, description, type, reward, created_by) VALUES (?, ?, ?, ?, ?)", (quest["title"], quest["description"], quest["type"], quest["reward"], quest["created_by"]))
     conn.commit()
     conn.close()
     
@@ -866,22 +843,22 @@ def duplicate_quest(quest_id: int, request: Request):
 def approve_submission(sub_id: int, request: Request):
     user = require_admin(request)
     conn = get_db()
-    sub = conn.execute("SELECT * FROM submissions WHERE id = ?", (sub_id,)).fetchone()
+    sub = execute_query(conn, "SELECT * FROM submissions WHERE id = ?", (sub_id,)).fetchone()
     if not sub:
         conn.close()
         raise HTTPException(status_code=404, detail="提出が見つかりません")
     
     # クエスト情報の取得
-    quest = conn.execute("SELECT * FROM quests WHERE id = ?", (sub["quest_id"],)).fetchone()
+    quest = execute_query(conn, "SELECT * FROM quests WHERE id = ?", (sub["quest_id"],)).fetchone()
     
     # ポイントと報酬の処理
     reward = quest["reward"]
     now = datetime.now().isoformat()
-    conn.execute("UPDATE submissions SET status = 'APPROVED', approved_at = ? WHERE id = ?", (now, sub_id))
-    conn.execute("UPDATE quests SET status = 'APPROVED' WHERE id = ?", (sub["quest_id"],))
+    execute_query(conn, "UPDATE submissions SET status = 'APPROVED', approved_at = ? WHERE id = ?", (now, sub_id))
+    execute_query(conn, "UPDATE quests SET status = 'APPROVED' WHERE id = ?", (sub["quest_id"],))
     
     # 受注者のポイントとレベルを更新
-    claimant = conn.execute("SELECT * FROM users WHERE id = ?", (sub["user_id"],)).fetchone()
+    claimant = execute_query(conn, "SELECT * FROM users WHERE id = ?", (sub["user_id"],)).fetchone()
     new_points = claimant["points"] + reward
     new_level = (new_points // 50) + 1
     
@@ -891,11 +868,7 @@ def approve_submission(sub_id: int, request: Request):
     elif new_level >= 5: title = "Veteran"
     elif new_level >= 3: title = "Adept"
     
-    conn.execute(
-        "UPDATE users SET points = ?, level = ?, title = ? WHERE id = ?",
-        (new_points, new_level, title, sub["user_id"])
-    )
-    
+    execute_query(conn, "UPDATE users SET points = ?, level = ?, title = ? WHERE id = ?", (new_points, new_level, title, sub["user_id"]))
     conn.commit()
     conn.close()
 
@@ -918,18 +891,18 @@ def approve_submission(sub_id: int, request: Request):
 def reject_submission(sub_id: int, request: Request):
     user = require_admin(request)
     conn = get_db()
-    sub = conn.execute("SELECT * FROM submissions WHERE id = ?", (sub_id,)).fetchone()
+    sub = execute_query(conn, "SELECT * FROM submissions WHERE id = ?", (sub_id,)).fetchone()
     if not sub:
         conn.close()
         raise HTTPException(status_code=404, detail="提出が見つかりません")
-    conn.execute("UPDATE submissions SET status = 'REJECTED' WHERE id = ?", (sub_id,))
+    execute_query(conn, "UPDATE submissions SET status = 'REJECTED' WHERE id = ?", (sub_id,))
     # クエストを CLAIMED に戻してユーザーが再提出できるようにする
-    conn.execute("UPDATE quests SET status = 'CLAIMED' WHERE id = ?", (sub["quest_id"],))
+    execute_query(conn, "UPDATE quests SET status = 'CLAIMED' WHERE id = ?", (sub["quest_id"],))
     conn.commit()
 
     # メンバー情報の取得
-    claimant = conn.execute("SELECT * FROM users WHERE id = ?", (sub["user_id"],)).fetchone()
-    quest = conn.execute("SELECT * FROM quests WHERE id = ?", (sub["quest_id"],)).fetchone()
+    claimant = execute_query(conn, "SELECT * FROM users WHERE id = ?", (sub["user_id"],)).fetchone()
+    quest = execute_query(conn, "SELECT * FROM quests WHERE id = ?", (sub["quest_id"],)).fetchone()
     conn.close()
 
     # メンバーへ通知 (DM)
@@ -955,7 +928,7 @@ def reject_submission(sub_id: int, request: Request):
 def admin_set_title(request: Request, target_id: int, title: str = Form(...)):
     user = require_admin(request)
     conn = get_db()
-    conn.execute("UPDATE users SET title = ? WHERE id = ?", (title, target_id))
+    execute_query(conn, "UPDATE users SET title = ? WHERE id = ?", (title, target_id))
     conn.commit()
     conn.close()
     return RedirectResponse(url="/admin", status_code=303)
@@ -965,8 +938,9 @@ def admin_set_title(request: Request, target_id: int, title: str = Form(...)):
 def admin_set_penalty(request: Request, target_id: int, points: int = Form(...)):
     user = require_admin(request)
     conn = get_db()
-    # ポイントがマイナスにならないようにMAX(0, points - deduction)を使用
-    conn.execute("UPDATE users SET points = MAX(0, points - ?) WHERE id = ?", (points, target_id))
+    # ポイントがマイナスにならないように各DBに応じた関数を使用
+    penalty_query = "UPDATE users SET points = GREATEST(0, points - ?) WHERE id = ?" if DATABASE_URL else "UPDATE users SET points = MAX(0, points - ?) WHERE id = ?"
+    execute_query(conn, penalty_query, (points, target_id))
     conn.commit()
     conn.close()
     return RedirectResponse(url="/admin", status_code=303)
