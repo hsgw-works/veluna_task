@@ -165,10 +165,17 @@ def get_db():
 def execute_query(conn, query, params=None):
     """DBによってプレースホルダ (? か %s) を切り替える"""
     if DATABASE_URL:
+        # 文字列置換により ? を %s に変換
         query = query.replace("?", "%s")
-    cursor = conn.cursor()
-    cursor.execute(query, params or ())
-    return cursor
+    
+    # 接続が有効か確認（たまにタイムアウトすることがあるため）
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, params or ())
+        return cursor
+    except Exception as e:
+        print(f"Database Query Error: {e}")
+        raise e
 
 
 def init_db():
@@ -407,33 +414,38 @@ def auth_google(request: Request):
 
 @app.post("/login")
 def login(request: Request, name: str = Form(...), password: str = Form(...)):
-    name = name.strip() # Handle trailing spaces
-    conn = get_db()
-    user = execute_query(conn, "SELECT * FROM users WHERE name = ?", (name,)).fetchone()
-    conn.close()
-    
-    lang = request.cookies.get("preferred_lang", "ja")
-    
-    if not user:
-        msg = "ユーザーが見つかりません" if lang == "ja" else "User not found"
-        return templates.TemplateResponse(request, "auth_error.html", {"message": msg, "lang": lang}, status_code=401)
+    name = name.strip() 
+    try:
+        conn = get_db()
+        user = execute_query(conn, "SELECT * FROM users WHERE name = ?", (name,)).fetchone()
+        conn.close()
         
-    if not user["password_hash"]:
-        return templates.TemplateResponse(request, "auth_error.html", {
-            "message": f"Account '{name}' exists but has no password set (Legacy).",
-            "lang": lang
-        })
+        lang = request.cookies.get("preferred_lang", "ja")
+        
+        if not user:
+            msg = "ユーザーが見つかりません" if lang == "ja" else "User not found"
+            return templates.TemplateResponse(request, "auth_error.html", {"message": msg, "lang": lang}, status_code=401)
+            
+        if not user["password_hash"]:
+            return templates.TemplateResponse(request, "auth_error.html", {
+                "message": f"Account '{name}' exists but has no password set (Legacy).",
+                "lang": lang
+            })
 
-    if not verify_password(password, user["password_hash"]):
-        return templates.TemplateResponse(request, "auth_error.html", {
-            "message": "Invalid PIN." if lang == "en" else "PINが正しくありません。",
-            "lang": lang
-        })
-        
-    resp = RedirectResponse(url="/home", status_code=303)
-    # Automatic login: 30 days
-    resp.set_cookie("user_id", str(user["id"]), max_age=30*24*60*60)
-    return resp
+        if not verify_password(password, user["password_hash"]):
+            return templates.TemplateResponse(request, "auth_error.html", {
+                "message": "Invalid PIN." if lang == "en" else "PINが正しくありません。",
+                "lang": lang
+            })
+            
+        resp = RedirectResponse(url="/home", status_code=303)
+        resp.set_cookie("user_id", str(user["id"]), max_age=30*24*60*60)
+        return resp
+    except Exception as e:
+        import traceback
+        err_msg = f"INTERNAL ERROR: {str(e)}\n{traceback.format_exc()}"
+        print(err_msg)
+        return HTMLResponse(content=f"<pre>{err_msg}</pre>", status_code=500)
 
 
 @app.get("/profile", response_class=HTMLResponse)
