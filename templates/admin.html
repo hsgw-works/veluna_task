@@ -136,6 +136,9 @@
               {% endif %}
             </div>
             <div class="flex gap-2">
+              <a href="/admin/submissions/{{ s.sub_id }}/obsidian" class="btn btn-outline" style="font-size:0.7rem; border:1px solid var(--border); text-decoration:none; display:flex; align-items:center; justify-content:center; flex:0.4;">
+                📓 Obsidian
+              </a>
               <form method="POST" action="/submissions/{{ s.sub_id }}/approve" style="flex:1;">
                 <button type="submit" class="btn btn-success w-full">{{ "Approve" if lang == "en" else "承認" }}</button>
               </form>

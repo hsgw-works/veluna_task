@@ -34,6 +34,20 @@ DATA_DIR = os.getenv("DATA_DIR", ".")
 UPLOAD_FOLDER = os.path.join(DATA_DIR, "uploads")
 DB_PATH = os.path.join(DATA_DIR, "quest_board.db")
 
+# ─── Supabase Storage Setup ───
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "reports")
+supabase_client = None
+
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        from supabase import create_client
+        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("✅ Supabase Storage client initialized.")
+    except Exception as e:
+        print(f"⚠️ Failed to initialize Supabase client: {e}")
+
 try:
     import discord
     from discord.ext import commands
@@ -698,6 +712,31 @@ def save_file_locally(file_bytes, filename, quest_type):
     encoded_filename = urllib.parse.quote(safe_filename)
     return f"/uploads/{encoded_quest_type}/{encoded_filename}"
 
+def save_file_to_supabase(file_bytes, filename, quest_type):
+    """ファイルをSupabase Storageにアップロードし、公開URLを返す"""
+    if not supabase_client:
+        return None
+        
+    import uuid
+    import os
+    
+    ext = os.path.splitext(filename)[1].lower()
+    safe_filename = f"{quest_type}/{uuid.uuid4().hex[:8]}_{filename}"
+    
+    try:
+        # アップロード実行
+        supabase_client.storage.from_(SUPABASE_BUCKET).upload(
+            path=safe_filename,
+            file=file_bytes,
+            file_options={"upsert": "true"}
+        )
+        # 公開URLの取得
+        res = supabase_client.storage.from_(SUPABASE_BUCKET).get_public_url(safe_filename)
+        return res
+    except Exception as e:
+        print(f"Supabase Upload Error: {e}")
+        return None
+
 
 
 # ─── Discord Bot Listeners ───
@@ -732,17 +771,27 @@ if bot:
         user_id = quest["claimed_by"]
         user = execute_query(conn, "SELECT name FROM users WHERE id = ?", (user_id,)).fetchone()
         
-        # ローカル(OneDrive連携)への保存プロセス
-        await ctx.send(" ファイルをサーバーの専用フォルダに保存しています...")
+        # クラウド保存を優先
+        await ctx.send(" 報告資料をクラウド（Supabase）に永久保存しています...")
         import functools
         try:
             file_bytes = await attachment.read()
-            quest_type = quest["type"]  # NORMAL, EMERGENCY, SPECIAL etc
-            
+            quest_type = quest["type"]
             loop = asyncio.get_running_loop()
-            local_url = await loop.run_in_executor(None, functools.partial(save_file_locally, file_bytes, attachment.filename, quest_type))
-            content_url = local_url
-            absolute_url = f"{BASE_URL}{local_url}"
+            
+            if supabase_client:
+                # クラウド保存
+                cloud_url = await loop.run_in_executor(None, functools.partial(save_file_to_supabase, file_bytes, attachment.filename, quest_type))
+                if cloud_url:
+                    content_url = cloud_url
+                    absolute_url = cloud_url
+                else:
+                    raise Exception("Cloud upload failed fallback to local")
+            else:
+                # ローカル保存 (フォールバック)
+                local_url = await loop.run_in_executor(None, functools.partial(save_file_locally, file_bytes, attachment.filename, quest_type))
+                content_url = local_url
+                absolute_url = f"{BASE_URL}{local_url}"
         except Exception as e:
             await ctx.send(f"⚠️ 保存に失敗しました (フォールバックとしてDiscordのURLを記録します): {e}")
             content_url = attachment.url
@@ -956,6 +1005,61 @@ def admin_set_penalty(request: Request, target_id: int, points: int = Form(...))
     conn.commit()
     conn.close()
     return RedirectResponse(url="/admin", status_code=303)
+
+
+@app.get("/admin/submissions/{sub_id}/obsidian")
+def download_obsidian_report(sub_id: int, request: Request):
+    """提出物をObsidian用Markdownとして書き出す"""
+    user = require_admin(request)
+    conn = get_db()
+    
+    # データの取得
+    sub = execute_query(conn, "SELECT s.*, q.title as quest_title, q.description as quest_desc, q.reward, q.type as quest_type, u.name as user_name FROM submissions s JOIN quests q ON s.quest_id = q.id JOIN users u ON s.user_id = u.id WHERE s.id = ?", (sub_id,)).fetchone()
+    conn.close()
+    
+    if not sub:
+        raise HTTPException(status_code=404)
+        
+    # Markdownの生成
+    import urllib.parse
+    date_str = sub["submitted_at"][:10] if sub["submitted_at"] else "unknown-date"
+    safe_title = "".join([c for c in sub["quest_title"] if c.isalnum() or c in (" ", "-", "_")])[:30]
+    filename = f"{date_str}_{safe_title}.md"
+    
+    md_content = f"""---
+tags: GuildReport
+quest_id: {sub["quest_id"]}
+quest_title: "{sub["quest_title"]}"
+adventurer: "{sub["user_name"]}"
+date: {sub["submitted_at"]}
+reward: {sub["reward"]} Pts
+quest_type: {sub["quest_type"]}
+---
+# 📜 ギルド報告書: {sub["quest_title"]}
+
+## 冒険者
+**{sub["user_name"]}**
+
+## 提出内容
+提出日時: {sub["submitted_at"]}
+
+### 添付資料
+![[報告資料]]({sub["content"]})
+
+[ブラウザで開く]({sub["content"]})
+
+---
+*Guild Archivist System v2.0*
+"""
+    
+    from fastapi.responses import Response
+    return Response(
+        content=md_content,
+        media_type="text/markdown",
+        headers={
+            "Content-Disposition": f"attachment; filename={urllib.parse.quote(filename)}"
+        }
+    )
 
 
 # ────────────────────────────────────────────
