@@ -444,10 +444,8 @@ def login(request: Request, name: str = Form(...), password: str = Form(...)):
         resp.set_cookie("user_id", str(user["id"]), max_age=30*24*60*60)
         return resp
     except Exception as e:
-        import traceback
-        err_msg = f"INTERNAL ERROR: {str(e)}\n{traceback.format_exc()}"
-        print(err_msg)
-        return HTMLResponse(content=f"<pre>{err_msg}</pre>", status_code=500)
+        print(f"Login Error: {e}")
+        return RedirectResponse(url="/?error=1", status_code=303)
 
 
 @app.get("/profile", response_class=HTMLResponse)
