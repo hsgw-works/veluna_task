@@ -26,6 +26,8 @@ BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
 EXEC_CHANNEL_ID = os.getenv("EXEC_CHANNEL_ID", "REPLACE_ME")
 # データベース接続URL（クラウド用）
 DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.strip()
 
 # クラウド用の永続データ保存先 (Railwayの /data 等)
 DATA_DIR = os.getenv("DATA_DIR", ".")
