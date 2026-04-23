@@ -3,7 +3,7 @@ Quest Board - タスク管理アプリ
 FastAPI + SQLite + HTMX によるシンプルな実装
 """
 
-from fastapi import FastAPI, Request, Form, Depends, HTTPException
+from fastapi import FastAPI, Request, Form, Depends, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.security import OAuth2PasswordBearer
@@ -385,9 +385,9 @@ def home_portal(request: Request):
     # All members (for the online member strip)
     all_members = execute_query(conn, """SELECT id, name, icon_url, level, title, role, 
            (last_active_at >= (CURRENT_TIMESTAMP - INTERVAL '5 minutes')) as is_online 
-           FROM users ORDER BY role DESC, points DESC""" if DATABASE_URL else """SELECT id, name, icon_url, level, title, role, 
+           FROM users ORDER BY is_online DESC, role DESC, points DESC""" if DATABASE_URL else """SELECT id, name, icon_url, level, title, role, 
            (last_active_at >= datetime('now', '-5 minutes')) as is_online 
-           FROM users ORDER BY role DESC, points DESC""").fetchall()
+           FROM users ORDER BY is_online DESC, role DESC, points DESC""").fetchall()
     
     conn.close()
     return templates.TemplateResponse(request, "home.html", {
@@ -478,17 +478,38 @@ def profile_page(request: Request):
 
 
 @app.post("/profile")
-def update_profile(
+async def update_profile(
     request: Request,
     name: str = Form(...),
     specialty: str = Form(""),
     bio: str = Form(""),
     icon_url: str = Form(""),
-    discord_user_id: str = Form("")
+    discord_user_id: str = Form(""),
+    icon_file: UploadFile = File(None)
 ):
     user = require_user(request)
     conn = get_db()
-    execute_query(conn, "UPDATE users SET name = ?, specialty = ?, bio = ?, icon_url = ?, discord_user_id = ? WHERE id = ?", (name, specialty, bio, icon_url, discord_user_id, user["id"]))
+    
+    # アイコンファイルのアップロード処理
+    final_icon_url = icon_url
+    if icon_file and icon_file.filename:
+        file_bytes = await icon_file.read()
+        import functools
+        loop = asyncio.get_running_loop()
+        try:
+            if supabase_client:
+                cloud_url = await loop.run_in_executor(None, functools.partial(save_file_to_supabase, file_bytes, icon_file.filename, "avatars"))
+                if cloud_url:
+                    final_icon_url = cloud_url
+                else:
+                    raise Exception("Supabase upload failed")
+            else:
+                local_url = await loop.run_in_executor(None, functools.partial(save_file_locally, file_bytes, icon_file.filename, "avatars"))
+                final_icon_url = local_url
+        except Exception as e:
+            print(f"Icon upload failed: {e}")
+
+    execute_query(conn, "UPDATE users SET name = ?, specialty = ?, bio = ?, icon_url = ?, discord_user_id = ? WHERE id = ?", (name, specialty, bio, final_icon_url, discord_user_id, user["id"]))
     conn.commit()
     conn.close()
     return RedirectResponse(url="/profile", status_code=303)
@@ -1030,7 +1051,7 @@ def download_obsidian_report(sub_id: int, request: Request):
         
     # Markdownの生成
     import urllib.parse
-    date_str = sub["submitted_at"][:10] if sub["submitted_at"] else "unknown-date"
+    date_str = str(sub["submitted_at"])[:10] if sub["submitted_at"] else "unknown-date"
     safe_title = "".join([c for c in sub["quest_title"] if c.isalnum() or c in (" ", "-", "_")])[:30]
     filename = f"{date_str}_{safe_title}.md"
     

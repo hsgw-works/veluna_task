@@ -9,15 +9,22 @@
   </div>
 
   <div class="panel">
-    <form method="POST" action="/profile" style="display:flex; flex-direction:column; gap:1.5rem;">
+    <form method="POST" action="/profile" enctype="multipart/form-data" style="display:flex; flex-direction:column; gap:1.5rem;">
       <div class="flex items-center gap-6 mb-4">
         <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--bg-secondary); border: 1px solid var(--border); overflow: hidden; flex-shrink: 0;">
           {% if user.icon_url %}
             <img src="{{ user.icon_url }}" style="width:100%; height:100%; object-fit:cover;">
           {% endif %}
         </div>
-        <div class="form-group w-full">
-          <label for="icon_url">{{ "Icon URL" if lang == "en" else "アイコンのURL" }}</label>
+        <div class="form-group w-full" style="display: flex; flex-direction: column; gap: 0.5rem;">
+          <label for="icon_file">{{ "Upload Icon" if lang == "en" else "アイコン画像をアップロード" }}</label>
+          <input type="file" name="icon_file" accept="image/*" style="font-size: 0.8rem; padding: 0.2rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="flex-grow: 1; height: 1px; background: var(--border);"></div>
+            <span class="text-xs opacity-50">{{ "or" if lang == "en" else "または" }}</span>
+            <div style="flex-grow: 1; height: 1px; background: var(--border);"></div>
+          </div>
+          <label for="icon_url" style="font-size: 0.8rem; margin-top: 0.25rem;">{{ "Icon URL" if lang == "en" else "アイコンのURL" }}</label>
           <input type="text" name="icon_url" value="{{ user.icon_url or '' }}" placeholder="https://example.com/icon.png">
         </div>
       </div>
@@ -28,8 +35,24 @@
       </div>
 
       <div class="form-group">
-        <label for="specialty">{{ "Specialty" if lang == "en" else "専門分野" }}</label>
-        <input type="text" name="specialty" value="{{ user.specialty or '' }}" placeholder="{{ 'Frontend Mage, Backend Warrior...' if lang == 'en' else 'フロントエンド魔法使い、バックエンド戦士...' }}">
+        <label for="specialty">{{ "Role / Specialty" if lang == "en" else "担当（専門分野）" }}</label>
+        <select name="specialty" class="w-full" style="padding: 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-alt); color: var(--text);">
+          <option value="" {% if not user.specialty %}selected{% endif %}>{{ "Select your role..." if lang == "en" else "担当を選択..." }}</option>
+          
+          <optgroup label="設定チーム">
+            <option value="人文分野担当" {% if user.specialty == '人文分野担当' %}selected{% endif %}>人文分野担当</option>
+            <option value="人文分野（一般）" {% if user.specialty == '人文分野（一般）' %}selected{% endif %}>人文分野（一般）</option>
+            <option value="自然分野担当" {% if user.specialty == '自然分野担当' %}selected{% endif %}>自然分野担当</option>
+            <option value="自然分野（一般）" {% if user.specialty == '自然分野（一般）' %}selected{% endif %}>自然分野（一般）</option>
+          </optgroup>
+
+          <optgroup label="制作チーム">
+            <option value="制作統括" {% if user.specialty == '制作統括' %}selected{% endif %}>制作統括</option>
+            <option value="プログラム" {% if user.specialty == 'プログラム' %}selected{% endif %}>プログラム</option>
+            <option value="アート" {% if user.specialty == 'アート' %}selected{% endif %}>アート</option>
+            <option value="サウンド" {% if user.specialty == 'サウンド' %}selected{% endif %}>サウンド</option>
+          </optgroup>
+        </select>
       </div>
 
       <div class="form-group">
