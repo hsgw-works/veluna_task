@@ -376,18 +376,19 @@ def home_portal(request: Request):
     res = execute_query(conn, "SELECT COUNT(*) as count FROM quests WHERE claimed_by = ? AND status IN ('CLAIMED','SUBMITTED')", (user["id"],)).fetchone()
     my_active = res["count"] if res else 0
     
-    # Recent quests
-    recent_quests = execute_query(conn, "SELECT * FROM quests WHERE status = 'OPEN' ORDER BY delivered_at DESC LIMIT 3").fetchall()
-    
-    # Recent announcements
-    announcements = execute_query(conn, "SELECT * FROM announcements ORDER BY created_at DESC LIMIT 3").fetchall()
-    
     # All members (for the online member strip)
     all_members = execute_query(conn, """SELECT id, name, icon_url, level, title, role, specialty, 
            (last_active_at >= (CURRENT_TIMESTAMP - INTERVAL '5 minutes')) as is_online 
            FROM users ORDER BY is_online DESC, role DESC, points DESC""" if DATABASE_URL else """SELECT id, name, icon_url, level, title, role, specialty, 
            (last_active_at >= datetime('now', '-5 minutes')) as is_online 
            FROM users ORDER BY is_online DESC, role DESC, points DESC""").fetchall()
+    
+    # Recent quests (Only delivered ones)
+    recent_quests = execute_query(conn, """SELECT * FROM quests WHERE status = 'OPEN' AND delivered_at <= CURRENT_TIMESTAMP ORDER BY delivered_at DESC LIMIT 3""" if DATABASE_URL else """SELECT * FROM quests WHERE status = 'OPEN' AND delivered_at <= datetime('now') ORDER BY delivered_at DESC LIMIT 3""").fetchall()
+    
+    # Recent announcements
+    announcements = execute_query(conn, "SELECT * FROM announcements ORDER BY created_at DESC LIMIT 3").fetchall()
+
     
     conn.close()
     return templates.TemplateResponse(request, "home.html", {
@@ -522,9 +523,11 @@ def board(request: Request):
     user = require_user(request)
     lang = request.cookies.get("preferred_lang", "ja")
     conn = get_db()
-    quests = execute_query(conn, "SELECT q.*, u.name AS creator_name FROM quests q "
-        "JOIN users u ON q.created_by = u.id "
-        "WHERE q.status = 'OPEN' ORDER BY q.id DESC").fetchall()
+    quests = execute_query(conn, """SELECT q.*, u.name AS creator_name FROM quests q 
+        JOIN users u ON q.created_by = u.id 
+        WHERE q.status = 'OPEN' AND q.delivered_at <= CURRENT_TIMESTAMP ORDER BY q.id DESC""" if DATABASE_URL else """SELECT q.*, u.name AS creator_name FROM quests q 
+        JOIN users u ON q.created_by = u.id 
+        WHERE q.status = 'OPEN' AND q.delivered_at <= datetime('now') ORDER BY q.id DESC""").fetchall()
     conn.close()
     return templates.TemplateResponse(request, "board.html", {"user": user, "quests": quests, "lang": lang})
 
@@ -580,8 +583,9 @@ def admin_dashboard(request: Request):
 def list_quests(request: Request):
     user = require_user(request)
     conn = get_db()
-    quests = execute_query(conn, "SELECT q.*, u.name AS creator_name FROM quests q "
-        "JOIN users u ON q.created_by = u.id WHERE q.status = 'OPEN'").fetchall()
+    quests = execute_query(conn, """SELECT q.*, u.name AS creator_name FROM quests q 
+        JOIN users u ON q.created_by = u.id WHERE q.status = 'OPEN' AND q.delivered_at <= CURRENT_TIMESTAMP""" if DATABASE_URL else """SELECT q.*, u.name AS creator_name FROM quests q 
+        JOIN users u ON q.created_by = u.id WHERE q.status = 'OPEN' AND q.delivered_at <= datetime('now')""").fetchall()
     conn.close()
     return [dict(q) for q in quests]
 
@@ -611,18 +615,23 @@ def create_quest(
     type: str = Form("NORMAL"),
     reward: int = Form(10),
     deadline: str = Form(None),
-    quantity: int = Form(1)
+    quantity: int = Form(1),
+    delivered_at: str = Form(None)
 ):
     user = require_admin(request)
     conn = get_db()
+    d_at = delivered_at if delivered_at else datetime.now().isoformat()
     for _ in range(quantity):
-        execute_query(conn, "INSERT INTO quests (title, description, type, reward, created_by, deadline_at) VALUES (?, ?, ?, ?, ?, ?)", (title, description, type, reward, user["id"], deadline))
+        execute_query(conn, "INSERT INTO quests (title, description, type, reward, created_by, deadline_at, delivered_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (title, description, type, reward, user["id"], deadline, d_at))
     conn.commit()
     conn.close()
     
     quantity_text = f" (x{quantity}件)" if quantity > 1 else ""
     msg = f"報酬: **{reward} Pts**\n\n{description}"
     broadcast_to_discord(" 新着クエスト発行: " + title + quantity_text, msg, 0xe74c3c if type == 'EMERGENCY' else 0x3498db)
+    
+    sync_to_sheets("CREATE_QUEST", {"user": user["name"], "title": title, "reward": reward, "delivered_at": d_at})
+
     
     return RedirectResponse(url="/admin", status_code=303)
 
@@ -640,6 +649,7 @@ def create_announcement(
     conn.close()
     
     broadcast_to_discord(" お知らせ: " + title, content, 0xf1c40f)
+    sync_to_sheets("CREATE_ANNOUNCEMENT", {"user": "Admin", "title": title})
     
     return RedirectResponse(url="/admin", status_code=303)
 
@@ -679,13 +689,15 @@ def edit_quest_submit(
     description: str = Form(...),
     type: str = Form(...),
     reward: int = Form(...),
-    deadline: str = Form("")
+    deadline: str = Form(""),
+    delivered_at: str = Form("")
 ):
     require_admin(request)
     conn = get_db()
-    execute_query(conn, "UPDATE quests SET title = ?, description = ?, type = ?, reward = ?, deadline_at = ? WHERE id = ?", (title, description, type, reward, deadline if deadline else None, quest_id))
+    execute_query(conn, "UPDATE quests SET title = ?, description = ?, type = ?, reward = ?, deadline_at = ?, delivered_at = ? WHERE id = ?", (title, description, type, reward, deadline if deadline else None, delivered_at if delivered_at else datetime.now().isoformat(), quest_id))
     conn.commit()
     conn.close()
+
     return RedirectResponse(url="/admin", status_code=303)
 
 
@@ -756,7 +768,10 @@ def save_file_to_supabase(file_bytes, filename, quest_type):
         )
         # 公開URLの取得
         res = supabase_client.storage.from_(SUPABASE_BUCKET).get_public_url(safe_filename)
-        return res
+        # 最近のSDKでは文字列を直接返す場合と、オブジェクトを返す場合がある
+        if isinstance(res, str):
+            return res
+        return getattr(res, "public_url", str(res))
     except Exception as e:
         print(f"Supabase Upload Error: {e}")
         return None
@@ -912,13 +927,15 @@ def duplicate_quest(quest_id: int, request: Request):
         conn.close()
         raise HTTPException(status_code=404)
         
-    execute_query(conn, "INSERT INTO quests (title, description, type, reward, created_by) VALUES (?, ?, ?, ?, ?)", (quest["title"], quest["description"], quest["type"], quest["reward"], quest["created_by"]))
+    execute_query(conn, "INSERT INTO quests (title, description, type, reward, created_by, delivered_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)", (quest["title"], quest["description"], quest["type"], quest["reward"], quest["created_by"]))
     conn.commit()
     conn.close()
     
     # 複製時のDiscord通知
     msg = f"報酬: **{quest['reward']} Pts**\n\n{quest['description']}"
     broadcast_to_discord(" クエスト再発行: " + quest['title'], msg, 0xe74c3c if quest['type'] == 'EMERGENCY' else 0x3498db)
+    sync_to_sheets("DUPLICATE_QUEST", {"user": "Admin", "quest_id": quest_id, "title": quest["title"]})
+
     
     return RedirectResponse(url="/admin", status_code=303)
 
@@ -956,6 +973,9 @@ def approve_submission(sub_id: int, request: Request):
     execute_query(conn, "UPDATE users SET points = ?, level = ?, title = ? WHERE id = ?", (new_points, new_level, title, sub["user_id"]))
     conn.commit()
     conn.close()
+
+    sync_to_sheets("APPROVE_SUBMISSION", {"user": claimant["name"], "quest_title": quest["title"], "reward": reward})
+
 
     # メンバーへ通知 (DM)
     if claimant["discord_user_id"]:
