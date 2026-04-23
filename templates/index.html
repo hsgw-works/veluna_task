@@ -22,7 +22,7 @@
       </div>
       <div class="form-group">
         <label for="password">{{ "PIN (4 digits)" if lang == "en" else "PIN (数字4桁)" }}</label>
-        <input type="password" name="password" required maxlength="4" pattern="\d{4}">
+        <input type="password" name="password" required maxlength="4" inputmode="numeric" pattern="\d{4}" placeholder="••••">
       </div>
       <button type="submit" class="btn btn-primary w-full mt-4">{{ "Begin Adventure" if lang == "en" else "冒険を開始する" }}</button>
       
@@ -41,7 +41,7 @@
       </div>
       <div class="form-group">
         <label for="password">{{ "Set PIN (4 digits)" if lang == "en" else "PINを設定 (数字4桁)" }}</label>
-        <input type="password" name="password" required maxlength="4" pattern="\d{4}">
+        <input type="password" name="password" required maxlength="4" inputmode="numeric" pattern="\d{4}" placeholder="••••">
       </div>
       <button type="submit" class="btn btn-primary w-full mt-4">{{ "Create Character" if lang == "en" else "キャラクターを作成する" }}</button>
     </form>

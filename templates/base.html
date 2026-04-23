@@ -541,13 +541,43 @@
     }
 
     @media (max-width: 600px) {
-      main {
-        padding: 0 1rem 2rem;
+      body { padding-bottom: 5rem; }
+      .container { padding: 1rem; }
+      .nav-links, header nav > nav { display: none !important; } /* Hide desktop nav */
+      
+      .mobile-nav { 
+        display: flex !important; 
+        position: fixed; bottom: 0; left: 0; right: 0; 
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(10px);
+        border-top: 1px solid var(--border);
+        justify-content: space-around;
+        padding: 0.75rem 0.25rem;
+        z-index: 1000;
+        box-shadow: 0 -5px 20px rgba(0,0,0,0.05);
       }
-
-      header {
-        padding: 0.5rem 1rem;
+      .mobile-nav a {
+        color: var(--text-lt);
+        text-decoration: none;
+        font-size: 0.65rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+        transition: 0.3s;
+        flex: 1;
+        text-align: center;
       }
+      .mobile-nav a.active { color: var(--accent); font-weight: 700; }
+      .mobile-nav i { font-size: 1.2rem; font-style: normal; }
+      
+      /* Scale down for mobile cards */
+      .page-header h1 { font-size: 1.3rem !important; }
+      .panel { padding: 1rem !important; }
+      .quest-grid { grid-template-columns: 1fr !important; }
+      
+      /* Header adjustments */
+      header { padding: 0.75rem 1rem; }
     }
   </style>
 </head>
@@ -638,6 +668,32 @@
   <main>
     {% block content %}{% endblock %}
   </main>
+
+  <!-- Mobile Bottom Navigation -->
+  <div class="mobile-nav" style="display:none;">
+    <a href="/home" class="{% if request.url.path == '/home' %}active{% endif %}">
+      <i class="icon">🏠</i>
+      <span>Home</span>
+    </a>
+    <a href="/board" class="{% if request.url.path == '/board' %}active{% endif %}">
+      <i class="icon">📜</i>
+      <span>Quest</span>
+    </a>
+    <a href="/rankings" class="{% if request.url.path == '/rankings' %}active{% endif %}">
+      <i class="icon">🏆</i>
+      <span>Rank</span>
+    </a>
+    <a href="/profile" class="{% if request.url.path == '/profile' %}active{% endif %}">
+      <i class="icon">👤</i>
+      <span>Profile</span>
+    </a>
+    {% if user and user.role == 'admin' %}
+    <a href="/admin" class="{% if request.url.path == '/admin' %}active{% endif %}">
+      <i class="icon">⚙️</i>
+      <span>Admin</span>
+    </a>
+    {% endif %}
+  </div>
 
 </body>
 
