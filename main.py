@@ -383,9 +383,9 @@ def home_portal(request: Request):
     announcements = execute_query(conn, "SELECT * FROM announcements ORDER BY created_at DESC LIMIT 3").fetchall()
     
     # All members (for the online member strip)
-    all_members = execute_query(conn, """SELECT id, name, icon_url, level, title, role, 
+    all_members = execute_query(conn, """SELECT id, name, icon_url, level, title, role, specialty, 
            (last_active_at >= (CURRENT_TIMESTAMP - INTERVAL '5 minutes')) as is_online 
-           FROM users ORDER BY is_online DESC, role DESC, points DESC""" if DATABASE_URL else """SELECT id, name, icon_url, level, title, role, 
+           FROM users ORDER BY is_online DESC, role DESC, points DESC""" if DATABASE_URL else """SELECT id, name, icon_url, level, title, role, specialty, 
            (last_active_at >= datetime('now', '-5 minutes')) as is_online 
            FROM users ORDER BY is_online DESC, role DESC, points DESC""").fetchall()
     
@@ -421,11 +421,7 @@ def signup(name: str = Form(...), password: str = Form(...)):
     return resp
 
 
-@app.get("/auth/google", response_class=HTMLResponse)
-def auth_google(request: Request):
-    return templates.TemplateResponse(request, "auth_error.html", {
-        "message": "Google Login requires configuration. Please contact the administrator to set up Client ID and Secret."
-    })
+
 
 
 @app.post("/login")
@@ -482,7 +478,6 @@ async def update_profile(
     request: Request,
     name: str = Form(...),
     specialty: str = Form(""),
-    bio: str = Form(""),
     icon_url: str = Form(""),
     discord_user_id: str = Form(""),
     icon_file: UploadFile = File(None)
@@ -509,7 +504,7 @@ async def update_profile(
         except Exception as e:
             print(f"Icon upload failed: {e}")
 
-    execute_query(conn, "UPDATE users SET name = ?, specialty = ?, bio = ?, icon_url = ?, discord_user_id = ? WHERE id = ?", (name, specialty, bio, final_icon_url, discord_user_id, user["id"]))
+    execute_query(conn, "UPDATE users SET name = ?, specialty = ?, icon_url = ?, discord_user_id = ? WHERE id = ?", (name, specialty, final_icon_url, discord_user_id, user["id"]))
     conn.commit()
     conn.close()
     return RedirectResponse(url="/profile", status_code=303)
@@ -950,7 +945,7 @@ def approve_submission(sub_id: int, request: Request):
     # 受注者のポイントとレベルを更新
     claimant = execute_query(conn, "SELECT * FROM users WHERE id = ?", (sub["user_id"],)).fetchone()
     new_points = claimant["points"] + reward
-    new_level = (new_points // 50) + 1
+    new_level = int((new_points / 20) ** 0.6) + 1
     
     # 称号の決定
     title = "Novice"

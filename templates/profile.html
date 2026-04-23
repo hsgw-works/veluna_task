@@ -55,10 +55,7 @@
         </select>
       </div>
 
-      <div class="form-group">
-        <label for="bio">{{ "Biography" if lang == "en" else "略歴" }}</label>
-        <textarea name="bio" rows="4" placeholder="{{ 'Tell the guild about yourself...' if lang == 'en' else '自分についてギルドに伝えよう...' }}">{{ user.bio or '' }}</textarea>
-      </div>
+
 
       <div class="form-group">
         <label for="discord_user_id">{{ "Discord User ID (Numerical)" if lang == "en" else "DiscordユーザーID (18桁の数字)" }}</label>
