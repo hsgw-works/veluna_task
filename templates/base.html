@@ -578,6 +578,10 @@
       
       /* Header adjustments */
       header { padding: 0.75rem 1rem; }
+
+      /* Move gear button up to prevent overlap with mobile-nav */
+      .gear-btn { bottom: 5rem; }
+      .gear-menu { bottom: 8.7rem; }
     }
   </style>
 </head>
@@ -672,24 +676,24 @@
   <!-- Mobile Bottom Navigation -->
   <div class="mobile-nav" style="display:none;">
     <a href="/home" class="{% if request.url.path == '/home' %}active{% endif %}">
-      <i class="icon">🏠</i>
+      <i class="icon"></i>
       <span>Home</span>
     </a>
     <a href="/board" class="{% if request.url.path == '/board' %}active{% endif %}">
-      <i class="icon">📜</i>
+      <i class="icon"></i>
       <span>Quest</span>
     </a>
     <a href="/rankings" class="{% if request.url.path == '/rankings' %}active{% endif %}">
-      <i class="icon">🏆</i>
+      <i class="icon"></i>
       <span>Rank</span>
     </a>
     <a href="/profile" class="{% if request.url.path == '/profile' %}active{% endif %}">
-      <i class="icon">👤</i>
+      <i class="icon"></i>
       <span>Profile</span>
     </a>
     {% if user and user.role == 'admin' %}
     <a href="/admin" class="{% if request.url.path == '/admin' %}active{% endif %}">
-      <i class="icon">⚙️</i>
+      <i class="icon"></i>
       <span>Admin</span>
     </a>
     {% endif %}

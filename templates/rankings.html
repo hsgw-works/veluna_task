@@ -23,9 +23,9 @@
         {% for m in members %}
         <tr style="background: var(--bg-secondary); transition: transform 0.2s; cursor: default;" onmouseover="this.style.transform='scale(1.01)'" onmouseout="this.style.transform='scale(1)'">
           <td style="padding: 1rem; border-radius: 4px 0 0 4px; font-weight: 700;">
-            {% if loop.index == 1 %}<span style="color: #ffd700;">🥇 1st</span>
-            {% elif loop.index == 2 %}<span style="color: #c0c0c0;">🥈 2nd</span>
-            {% elif loop.index == 3 %}<span style="color: #cd7f32;">🥉 3rd</span>
+            {% if loop.index == 1 %}<span style="color: #ffd700;"> 1st</span>
+            {% elif loop.index == 2 %}<span style="color: #c0c0c0;"> 2nd</span>
+            {% elif loop.index == 3 %}<span style="color: #cd7f32;"> 3rd</span>
             {% else %}#{{ loop.index }}{% endif %}
           </td>
           <td style="padding: 1rem;">

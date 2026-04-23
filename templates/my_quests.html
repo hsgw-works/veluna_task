@@ -29,7 +29,7 @@
 
       <h3 style="margin: 0.5rem 0 0.25rem 0;">{{ q.title }}</h3>
       {% if q.deadline_at %}
-        <div class="text-xs decoration-none mb-2" style="color:var(--danger); font-weight:600;">⌛ Deadline: {{ q.deadline_at.replace('T', ' ') }}</div>
+        <div class="text-xs decoration-none mb-2" style="color:var(--danger); font-weight:600;"> Deadline: {{ q.deadline_at.replace('T', ' ') }}</div>
       {% endif %}
       
       <p class="text-sm opacity-60 mb-4">{{ q.description }}</p>
@@ -58,7 +58,7 @@
       {% elif q.status == 'SUBMITTED' %}
         <div style="border-top:1px solid var(--border); padding-top:1rem;">
           <p class="text-sm opacity-60 mb-3">
-            {{ "🕐 Waiting for administrator review..." if lang == "en" else "🕐 管理者の審査を待っています..." }}
+            {{ " Waiting for administrator review..." if lang == "en" else " 管理者の審査を待っています..." }}
           </p>
           <div class="flex flex-end">
             <form method="POST" action="/quests/{{ q.id }}/unsubmit" style="margin: 0; width: 100%;">
@@ -70,7 +70,7 @@
         </div>
       {% elif q.status == 'APPROVED' %}
         <p class="text-sm" style="border-top:1px solid var(--border); padding-top:1rem; color:var(--success); font-weight:600;">
-          {{ "✓ This quest has been officially completed." if lang == "en" else "✓ このクエストは正式に完了しました。" }}
+          {{ " This quest has been officially completed." if lang == "en" else " このクエストは正式に完了しました。" }}
         </p>
       {% endif %}
     </div>

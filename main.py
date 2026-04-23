@@ -44,9 +44,9 @@ if SUPABASE_URL and SUPABASE_KEY:
     try:
         from supabase import create_client
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        print("✅ Supabase Storage client initialized.")
+        print(" Supabase Storage client initialized.")
     except Exception as e:
-        print(f"⚠️ Failed to initialize Supabase client: {e}")
+        print(f"⚠ Failed to initialize Supabase client: {e}")
 
 try:
     import discord
@@ -82,9 +82,9 @@ try:
             try:
                 embed = discord.Embed(title=title, description=description, color=color)
                 await channel.send(embed=embed)
-                print(f"✅ Discordへ通知しました: {title}")
+                print(f" Discordへ通知しました: {title}")
             except Exception as e:
-                print(f"⚠️ Discordへの送信に失敗: {e}")
+                print(f"⚠ Discordへの送信に失敗: {e}")
                 
         asyncio.run_coroutine_threadsafe(send_msg(), bot.loop)
 
@@ -99,9 +99,9 @@ try:
                 if channel:
                     embed = discord.Embed(title=title, description=description, color=color)
                     await channel.send(embed=embed)
-                    print(f"✅ 共有チャンネル({channel_id_str})へ通知しました。")
+                    print(f" 共有チャンネル({channel_id_str})へ通知しました。")
             except Exception as e:
-                print(f"⚠️ 共有チャンネルへの送信に失敗: {e}")
+                print(f"⚠ 共有チャンネルへの送信に失敗: {e}")
 
         asyncio.run_coroutine_threadsafe(send_msg(), bot.loop)
 except ImportError:
@@ -801,7 +801,7 @@ if bot:
                 content_url = local_url
                 absolute_url = f"{BASE_URL}{local_url}"
         except Exception as e:
-            await ctx.send(f"⚠️ 保存に失敗しました (フォールバックとしてDiscordのURLを記録します): {e}")
+            await ctx.send(f"⚠ 保存に失敗しました (フォールバックとしてDiscordのURLを記録します): {e}")
             content_url = attachment.url
             absolute_url = attachment.url
             
@@ -943,7 +943,7 @@ def approve_submission(sub_id: int, request: Request):
 
     # メンバーへ通知 (DM)
     if claimant["discord_user_id"]:
-        msg = f"🎉 **クエスト完了報告!**\nあなたの「{quest['title']}」の報告が承認されました！\n獲得ポイント: **{reward} Pts**\n現在のランク: **Lv.{new_level} {title}**\nお見事です、冒険者よ。"
+        msg = f" **クエスト完了報告!**\nあなたの「{quest['title']}」の報告が承認されました！\n獲得ポイント: **{reward} Pts**\n現在のランク: **Lv.{new_level} {title}**\nお見事です、冒険者よ。"
         try:
             async def send_dm():
                 discord_user = await bot.fetch_user(int(claimant["discord_user_id"]))
@@ -976,7 +976,7 @@ def reject_submission(sub_id: int, request: Request):
 
     # メンバーへ通知 (DM)
     if claimant["discord_user_id"]:
-        msg = f"⚠️ **クエスト再提出連絡**\nあなたの「{quest['title']}」の報告は承認されませんでした。\n修正または不足資料を添付して、再度 `!submit` してください。"
+        msg = f"⚠ **クエスト再提出連絡**\nあなたの「{quest['title']}」の報告は承認されませんでした。\n修正または不足資料を添付して、再度 `!submit` してください。"
         try:
             async def send_dm():
                 discord_user = await bot.fetch_user(int(claimant["discord_user_id"]))
@@ -1043,7 +1043,7 @@ date: {sub["submitted_at"]}
 reward: {sub["reward"]} Pts
 quest_type: {sub["quest_type"]}
 ---
-# 📜 ギルド報告書: {sub["quest_title"]}
+#  ギルド報告書: {sub["quest_title"]}
 
 ## 冒険者
 **{sub["user_name"]}**
