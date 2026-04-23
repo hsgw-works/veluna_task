@@ -39,7 +39,7 @@
     <div class="form-group">
       <label for="deadline">{{ "Deadline (Optional)" if lang == "en" else "期限 (オプション / 空欄可)" }}</label>
       <!-- HTML datetime-local requires YYYY-MM-DDThh:mm format -->
-      <input type="datetime-local" id="deadline" name="deadline" value="{{ q.deadline_at if q.deadline_at else '' }}">
+      <input type="datetime-local" id="deadline" name="deadline" value="{{ (q.deadline_at | string).replace(' ', 'T')[:16] if q.deadline_at else '' }}">
     </div>
 
     <div class="flex gap-4 items-center">

@@ -29,7 +29,7 @@
 
       <h3 style="margin: 0.5rem 0 0.25rem 0;">{{ q.title }}</h3>
       {% if q.deadline_at %}
-        <div class="text-xs decoration-none mb-2" style="color:var(--danger); font-weight:600;"> Deadline: {{ q.deadline_at.replace('T', ' ') }}</div>
+        <div class="text-xs decoration-none mb-2" style="color:var(--danger); font-weight:600;"> Deadline: {{ (q.deadline_at | string).replace('T', ' ') }}</div>
       {% endif %}
       
       <p class="text-sm opacity-60 mb-4">{{ q.description }}</p>
